@@ -1,19 +1,19 @@
 package io.github.itsflicker.itsbot.command
 
-import io.github.itsflicker.itsbot.*
+import io.github.itsflicker.itsbot.ItsBot
 import io.github.itsflicker.itsbot.config.IBConfig
-import io.github.itsflicker.itsbot.data.BindingData
+import io.github.itsflicker.itsbot.listener.BotMessageListener
+import io.github.itsflicker.itsbot.util.*
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeoutOrNull
 import net.mamoe.mirai.console.plugin.version
 import net.mamoe.mirai.event.events.GroupMessageEvent
-import net.mamoe.mirai.event.events.MessageEvent
 
-private typealias CommandHandler = suspend MessageEvent.(List<String>) -> Any
+private typealias CommandHandler = suspend GroupMessageEvent.(List<String>) -> Any?
 
-object Commands {
+object GroupCommands {
 
     val handlers = mutableMapOf<String, CommandHandler>()
 
@@ -21,7 +21,7 @@ object Commands {
         private set
 
     private val handler = CoroutineExceptionHandler { _, throwable ->
-        ItsBot.logger.debug(throwable)
+        ItsBot.logger.error(throwable)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -43,37 +43,30 @@ object Commands {
     @CommandBody(["h", "?"])
     val help: CommandHandler = { helpMessage.uploadAsImage(sender) }
 
-    @CommandBody
+    @CommandBody(["op"], "!admin <subcommand> [args]", "管理员命令")
     val admin: CommandHandler = reply@ {
         if (sender.permission.level >= 1) {
-            if ()
-        }
-    }
-
-    @CommandBody(["bd", "绑定"], "!bind <player> <key>", "绑定QQ和玩家")
-    val bind: CommandHandler = reply@ {
-        val player = it.getOrNull(1) ?: return@reply "Type player name."
-        if (BindingData.bindings.values.any { it.equals(player, ignoreCase = true) }) {
-            return@reply "Another member has bound this player."
-        }
-        val key = it.getOrNull(2) ?: return@reply "Type key."
-        if (!player.reversed().md5().substring(20, 24).reversed().equals(key, ignoreCase = true)) {
-            return@reply "Wrong key."
-        }
-        if (ItsBot.connects.values.any { rcon ->
-                rcon.command("ft simplekether -source \"tell \$ server.getOfflinePlayer(\"$player\").hasPlayedBefore()\"").trimIndent().toBoolean()
-            }) {
-            BindingData.bindings[sender.id] = player
-            "Bind successfully."
+            when (it.getOrElse(1) { "help" }.lowercase()) {
+                "command", "cmd" -> {
+                    val server = it.getOrNull(2) ?: return@reply "Please specify server."
+                    val rcon = getRconFromName(server) ?: return@reply "No such server."
+                    val command = subList(it, 3).ifEmpty { return@reply "Please type command." }.joinToString(" ")
+                    rcon.command(command)?.uploadAsImage(sender)
+                }
+                "recall", "ch" -> {
+                    BotMessageListener.botMessageCache.removeLastOrNull()?.recall()
+                }
+                else -> Unit
+            }
         } else {
-            "No such player."
+            "You have no permission."
         }
     }
 
     @CommandBody(["online", "zx", "在线"], "!list", "列出所有在线玩家")
     val list: CommandHandler = reply@ {
         val jobs = mutableListOf<Deferred<Pair<String, Int>?>>()
-        ItsBot.connects.keys.forEach {
+        IBConfig.servers.keys.forEach {
             jobs += ItsBot.async(handler) { list(it) }
         }
         val builder = StringBuilder()
@@ -86,46 +79,46 @@ object Commands {
                 }
             }
         }
-        builder.insert(0, "<center>共 $count 在线\n")
-        builder.toString().uploadAsImage(sender)
+        builder.insert(0, "<c>共 $count 在线\n")
+        builder.toString().uploadAsImage(sender, pt = 60, pl = 50)
     }
 
     @CommandBody(["balancetop"], "!baltop <server>", "列出指定服务器的经济排行榜")
     val baltop: CommandHandler = reply@ {
         val server = it.getOrNull(1) ?: return@reply "Please specify server."
-        val rcon = getRcon(server) ?: return@reply "No such server."
+        val rcon = getRconFromName(server) ?: return@reply "No such server."
         (rcon.command("baltop") + rcon.command("baltop 2")).uploadAsImage(sender)
     }
 
     @CommandBody(["msg", "sl"], "!tell <player> <message>", "向服内玩家发送消息")
     val tell: CommandHandler = reply@ {
         val player = it.getOrNull(1) ?: return@reply "Please specify player."
-        val rcon = player.rcon ?: return@reply "No such player."
+        val rcon = getRconFromPlayer(player) ?: return@reply "No such player."
         val message = subList(it, 2).ifEmpty { return@reply "Please type message." }.joinToString(" ")
-        rcon.command("tellraw $player [{\"text\":\"$senderName(${sender.id})\",\"color\":\"gold\"},{\"text\":\" 对你说: \",\"color\":\"gray\"},{\"text\":\"$message\"}]")
+        rcon.command("ibb send $player \"$senderName(${sender.id})\" $message")
         Unit
     }
 
-    @CommandBody(["cmd", "ml"], "!command <command>", "使用绑定玩家发送命令")
-    val command: CommandHandler = reply@ {
-        val player = BindingData.bindings[sender.id] ?: return@reply "Bind first."
-        val rcon = player.rcon ?: return@reply "You are not online."
-        val command = subList(it, 1).joinToString(" ")
-        rcon.command("ft simplekether -sender $player -source \"command \"$command\"\"")
-    }
-
-    @CommandBody(["dc"], "!logout", "将绑定玩家登出游戏")
-    val logout: CommandHandler = reply@ {
-        val player = BindingData.bindings[sender.id] ?: return@reply "Bind first."
-        val rcon = player.rcon ?: return@reply "You are not online."
-        rcon.command("kick $player")
-    }
+//    @CommandBody(["cmd", "ml"], "!command <command>", "使用绑定玩家发送命令")
+//    val command: CommandHandler = reply@ {
+//        val player = BindingData.bindings[sender.id] ?: return@reply "Bind first."
+//        val rcon = getRconFromPlayer(player) ?: return@reply "You are not online."
+//        val command = subList(it, 1).joinToString(" ")
+//        rcon.command("it simplekether -sender $player -source \"command \"$command\"\"")
+//    }
+//
+//    @CommandBody(["dc"], "!logout", "将绑定玩家登出游戏")
+//    val logout: CommandHandler = reply@ {
+//        val player = BindingData.bindings[sender.id] ?: return@reply "Bind first."
+//        val rcon = getRconFromPlayer(player) ?: return@reply "You are not online."
+//        rcon.command("kick $player")
+//    }
 
     private suspend fun list(id: String): Pair<String, Int>? {
         return withTimeoutOrNull(5000L) {
             val list = onlinePlayers(id)
             val count = list.count()
-            val string = IBConfig.servers.first { it["id"] == id }["alias"].toString() + "($count)\n    "
+            val string = IBConfig.servers[id]!!.alias[0] + "($count)\n    "
             string + list.joinToString("\n    ") to count
         }
     }

@@ -1,5 +1,9 @@
 package io.github.itsflicker.itsbot.command
 
-annotation class SubCommand(
-    aliases:
+@Target(AnnotationTarget.FIELD)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class CommandBody(
+    val aliases: Array<String> = [],
+    val usage: String = "",
+    val description: String = ""
 )
