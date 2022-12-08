@@ -1,12 +1,13 @@
 options:
-  host: 'localhost'
-  port: '2000'
+  host: localhost
+  port: 2000
   prefix: "^[!！] ?(.*)"
   bots: [ 123456789 ]
   groups: [ 123456789 ]
 servers:
   id:
-    alias: [alias]
-    address: "address"
+    alias:
+      - alias
+    address: address
     port: 25575
-    password: "password"
+    password: password

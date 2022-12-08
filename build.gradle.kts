@@ -1,26 +1,39 @@
 plugins {
-    val kotlinVersion = "1.7.10"
+    val kotlinVersion = "1.7.20"
     kotlin("jvm") version kotlinVersion
     kotlin("plugin.serialization") version kotlinVersion
 
-    id("net.mamoe.mirai-console") version "2.12.0"
+    id("net.mamoe.mirai-console") version "2.13.2"
 }
 
 group = "io.github.itsflicker.itsbot"
-version = "0.1.0"
+version = "0.2.0"
 
 repositories {
+    mavenLocal()
     mavenCentral()
     maven("https://jitpack.io")
     maven("https://maven.aliyun.com/repository/public")
+//    maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
 }
 
 dependencies {
-    implementation("com.github.ben-manes.caffeine:caffeine:2.9.3")
+    implementation("org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.7.37")
+//    implementation("org.jetbrains.skiko:skiko-awt-runtime-linux-x64:0.7.20")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.2")
     implementation("com.github.Sunshine-wzy:rkon-core:1.2.2")
-//    implementation("io.coil-kt:coil:2.2.1")
+    implementation("top.e404:skiko-util:1.0.0") {
+        exclude(group = "org.jetbrains.kotlin")
+        exclude(group = "org.jetbrains.kotlinx")
+        exclude(group = "org.jetbrains.skiko")
+    }
 
     shadowLink("com.github.Sunshine-wzy:rkon-core")
+    shadowLink("top.e404:skiko-util")
+}
+
+mirai {
+    jvmTarget = JavaVersion.VERSION_11
 }
 
 val ktorVersion = "1.6.7"
@@ -33,12 +46,6 @@ fun org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler.ktorApi(id: Strin
 }
 
 kotlin {
-    sourceSets["test"].apply {
-        dependencies {
-            ktorApi("server-test-host")
-        }
-    }
-
     sourceSets.all {
         dependencies {
             ktorApi("client-okhttp")
